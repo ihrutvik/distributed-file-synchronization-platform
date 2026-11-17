@@ -1,0 +1,9 @@
+package dev.hrutvik.filesync.outbox;
+import org.apache.kafka.clients.producer.ProducerRecord; import org.springframework.beans.factory.annotation.Value; import org.springframework.kafka.core.KafkaTemplate; import org.springframework.scheduling.annotation.Scheduled; import org.springframework.stereotype.Component; import java.nio.charset.StandardCharsets; import java.time.Duration; import java.util.UUID; import java.util.concurrent.TimeUnit;
+@Component public class OutboxRelay {
+ private final OutboxLeaseStore store; private final KafkaTemplate<String,String> kafka; private final String owner=UUID.randomUUID().toString(); private final String topic; private final int batch; private final Duration lease; private final Duration timeout;
+ public OutboxRelay(OutboxLeaseStore store,KafkaTemplate<String,String> kafka,@Value("${filesync.outbox.topic:filesync.changes.v1}") String topic,@Value("${filesync.outbox.batch-size:100}") int batch,@Value("${filesync.outbox.lease-duration:PT30S}") Duration lease,@Value("${filesync.outbox.send-timeout:PT5S}") Duration timeout){this.store=store;this.kafka=kafka;this.topic=topic;this.batch=batch;this.lease=lease;this.timeout=timeout;}
+ @Scheduled(fixedDelayString="${filesync.outbox.poll-delay:1000}") public void publishBatch(){for(var message:store.claim(owner,batch,lease))publish(message);}
+ void publish(OutboxMessage message){try{var record=new ProducerRecord<String,String>(topic,message.tenantId()+":"+message.aggregateId(),message.payload());header(record,"event-id",message.id().toString());header(record,"event-type",message.eventType());header(record,"tenant-id",message.tenantId());kafka.send(record).get(timeout.toMillis(),TimeUnit.MILLISECONDS);store.published(message.id(),owner);}catch(Exception failure){store.release(message.id(),owner);}}
+ private static void header(ProducerRecord<String,String> record,String name,String value){record.headers().add(name,value.getBytes(StandardCharsets.UTF_8));}
+}

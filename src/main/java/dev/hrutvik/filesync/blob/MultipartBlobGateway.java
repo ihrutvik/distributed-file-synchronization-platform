@@ -1,0 +1,12 @@
+package dev.hrutvik.filesync.blob;
+import org.springframework.beans.factory.annotation.Value; import org.springframework.stereotype.Component; import software.amazon.awssdk.services.s3.S3Client; import software.amazon.awssdk.services.s3.model.*; import software.amazon.awssdk.services.s3.presigner.S3Presigner; import software.amazon.awssdk.services.s3.presigner.model.UploadPartPresignRequest; import java.time.Duration; import java.util.*;
+@Component public class MultipartBlobGateway {
+ private final S3Client s3; private final S3Presigner presigner; private final String bucket; private final Duration ttl;
+ public MultipartBlobGateway(S3Client s3,S3Presigner presigner,@Value("${filesync.blob.bucket}") String bucket,@Value("${filesync.blob.presign-ttl:PT15M}") Duration ttl){this.s3=s3;this.presigner=presigner;this.bucket=bucket;this.ttl=ttl;}
+ public RemoteUpload initiate(String key,String hash){return new RemoteUpload(key,s3.createMultipartUpload(CreateMultipartUploadRequest.builder().bucket(bucket).key(key).metadata(Map.of("content-sha256",hash)).build()).uploadId());}
+ public List<PartUpload> presign(String key,String uploadId,int count){var result=new ArrayList<PartUpload>();for(int part=1;part<=count;part++){var request=UploadPartRequest.builder().bucket(bucket).key(key).uploadId(uploadId).partNumber(part).build();var signed=presigner.presignUploadPart(UploadPartPresignRequest.builder().signatureDuration(ttl).uploadPartRequest(request).build());result.add(new PartUpload(part,signed.url().toString()));}return result;}
+ public void complete(String key,String uploadId,List<CompletedUploadPart> parts){var completed=parts.stream().map(p->CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build()).toList();s3.completeMultipartUpload(CompleteMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).multipartUpload(CompletedMultipartUpload.builder().parts(completed).build()).build());}
+ public BlobHead head(String key){var h=s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());return new BlobHead(h.contentLength(),h.metadata().get("content-sha256"));}
+ public void abort(String key,String uploadId){s3.abortMultipartUpload(AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build());}
+ public record RemoteUpload(String objectKey,String uploadId){} public record PartUpload(int partNumber,String url){} public record CompletedUploadPart(int partNumber,String eTag){} public record BlobHead(long sizeBytes,String declaredHash){}
+}

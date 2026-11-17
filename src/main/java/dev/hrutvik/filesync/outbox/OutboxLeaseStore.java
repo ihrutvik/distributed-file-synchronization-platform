@@ -1,0 +1,8 @@
+package dev.hrutvik.filesync.outbox;
+import org.springframework.jdbc.core.simple.JdbcClient; import org.springframework.stereotype.Repository; import org.springframework.transaction.annotation.Transactional; import java.time.*; import java.util.*;
+@Repository public class OutboxLeaseStore {
+ private final JdbcClient db; public OutboxLeaseStore(JdbcClient db){this.db=db;}
+ @Transactional public List<OutboxMessage> claim(String owner,int batch,Duration lease){Instant now=Instant.now();var rows=db.sql("select id,tenant_id,aggregate_id,event_type,payload::text,created_at from outbox_events where published_at is null and (leased_until is null or leased_until<:now) order by created_at limit :batch for update skip locked").param("now",now).param("batch",batch).query((rs,n)->new OutboxMessage(rs.getObject("id",UUID.class),rs.getString("tenant_id"),rs.getObject("aggregate_id",UUID.class),rs.getString("event_type"),rs.getString("payload"),rs.getTimestamp("created_at").toInstant())).list();Instant until=now.plus(lease);for(var row:rows)db.sql("update outbox_events set lease_owner=:o,leased_until=:u where id=:id").param("o",owner).param("u",until).param("id",row.id()).update();return rows;}
+ public void published(UUID id,String owner){db.sql("update outbox_events set published_at=now(),lease_owner=null,leased_until=null where id=:id and lease_owner=:o").param("id",id).param("o",owner).update();}
+ public void release(UUID id,String owner){db.sql("update outbox_events set lease_owner=null,leased_until=null where id=:id and lease_owner=:o and published_at is null").param("id",id).param("o",owner).update();}
+}
