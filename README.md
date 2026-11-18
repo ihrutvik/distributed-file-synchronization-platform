@@ -62,3 +62,4 @@ See [API examples](api-examples.http) and [architecture decisions](docs/architec
 ## Engineering signals for recruiters
 
 This repository demonstrates offline-first concurrency design, immutable data modeling, database-enforced idempotency, transactional event publication, content-addressed storage, and explicit failure semantics. The design is original and based on public distributed-systems patterns; it contains no proprietary GoDaddy or Airtel code.
+
