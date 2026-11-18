@@ -9,6 +9,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Durable multipart upload sessions with direct-to-S3 presigned part URLs
 - Replay-safe session creation and compensating multipart aborts
 - Completion checks for expected object size and declared hash metadata
+- Streamed server-side SHA-256 verification with leased, retryable workers
+- Blob verification status polling and a hard commit gate for unverified bytes
 - Compare-and-set updates using client `baseVersion`
 - Explicit `409 VERSION_CONFLICT` for stale devices
 - Payload-aware idempotent device operations
@@ -27,10 +29,11 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 
 1. A client hashes file bytes and creates an idempotent multipart session.
 2. The API returns short-lived presigned part URLs, so file bytes bypass application servers.
-3. After all parts are uploaded, completion validates object size and hash metadata.
-4. The client commits metadata with the last server version it observed.
-5. PostgreSQL locks the path head, rejects stale bases, appends the immutable version, advances the head, and writes an outbox event atomically.
-6. Downstream device feeds will consume the stable change event; retries are safe through the operation ID.
+3. After all parts are uploaded, completion validates object size and hash metadata and queues cryptographic verification.
+4. A leased worker streams the object through SHA-256; the client polls until verification is `VERIFIED`.
+5. The client commits metadata with the last server version it observed; unverified content receives `409 BLOB_NOT_VERIFIED`.
+6. PostgreSQL locks the path head, rejects stale bases, appends the immutable version, advances the head, and writes an outbox event atomically.
+7. Downstream device feeds consume the stable change event; retries are safe through the operation ID.
 
 On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the ordered page locally and advances only to the returned `nextCursor`. Tombstones travel through the same feed, so a device cannot accidentally resurrect content deleted while it was offline.
 
@@ -38,6 +41,8 @@ On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the or
 flowchart LR
   D["Device"] --> B["S3-compatible blob store"]
   D --> API["Version API"]
+  B --> V["Leased verifier"]
+  V --> API
   API --> DB[("PostgreSQL versions")]
   API --> O["Transactional outbox"]
   O --> R["Leased relay"]
@@ -57,4 +62,3 @@ See [API examples](api-examples.http) and [architecture decisions](docs/architec
 ## Engineering signals for recruiters
 
 This repository demonstrates offline-first concurrency design, immutable data modeling, database-enforced idempotency, transactional event publication, content-addressed storage, and explicit failure semantics. The design is original and based on public distributed-systems patterns; it contains no proprietary GoDaddy or Airtel code.
-
