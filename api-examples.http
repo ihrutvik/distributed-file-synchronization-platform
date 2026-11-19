@@ -41,3 +41,18 @@ Content-Type: application/json
 GET http://localhost:8080/v1/changes?after=0&limit=100
 X-Tenant-Id: acme
 
+### Acknowledge only after the returned page is durably applied on the device
+PUT http://localhost:8080/v1/sync/devices/11111111-1111-1111-1111-111111111111/cursor
+X-Tenant-Id: acme
+Content-Type: application/json
+
+{"cursor":42}
+
+### Read the durable cursor after reconnecting
+GET http://localhost:8080/v1/sync/devices/11111111-1111-1111-1111-111111111111/cursor
+X-Tenant-Id: acme
+
+### Find the safe retention watermark across devices active in the last 30 days
+GET http://localhost:8080/v1/sync/devices/compaction-watermark?activeWithinHours=720
+X-Tenant-Id: acme
+

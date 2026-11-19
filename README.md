@@ -20,6 +20,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - At-least-once publication with stable tenant/file keys and event headers
 - Tenant-scoped incremental change feed with monotonic cursors
 - Bounded cursor pagination for reconnecting and offline devices
+- Durable per-device cursor acknowledgements with monotonic progression
+- Active-device compaction watermark for safe retention decisions
 - PostgreSQL constraints and lookup indexes
 - Path normalization and traversal protection
 - Java 17, Spring Boot, Flyway, PostgreSQL, Kafka, and MinIO
@@ -37,6 +39,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 
 On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the ordered page locally and advances only to the returned `nextCursor`. Tombstones travel through the same feed, so a device cannot accidentally resurrect content deleted while it was offline.
 
+After durably applying a page, the device acknowledges its cursor through `PUT /v1/sync/devices/{deviceId}/cursor`. PostgreSQL rejects backwards movement and cursors beyond the tenant feed head. Operators can calculate the minimum acknowledgement across recently active devices before compacting history; inactive devices are deliberately excluded only through an explicit activity window.
+
 ```mermaid
 flowchart LR
   D["Device"] --> B["S3-compatible blob store"]
@@ -48,6 +52,7 @@ flowchart LR
   O --> R["Leased relay"]
   R --> K["Kafka change stream"]
   DB --> C["Cursor change feed"]
+  C --> A["Device acknowledgements"]
 ```
 
 ## Run locally

@@ -36,7 +36,13 @@ Every immutable file version receives a database-generated monotonic `change_seq
 
 The sequence is a cursor, not a promise of gap-free tenant-local numbering: other tenants share the global identity and rolled-back transactions can consume values. Devices care only about ordering and `>` semantics. They persist the new cursor after applying the full page locally. Because delete tombstones are ordinary versions, offline clients learn deletions through the same mechanism.
 
+## Durable device progress and compaction safety
+
+A client acknowledges a cursor only after the corresponding page is durably applied to its local state. The server stores one row per `(tenant, device)` and serializes updates with a row lock. Acknowledgements may stay equal for harmless retries but can never move backwards; a cursor beyond the current tenant feed head is rejected because it could make later retention unsafe.
+
+The first concurrent acknowledgement uses an atomic PostgreSQL upsert, keeping the greater cursor if two initial requests race. Every successful acknowledgement refreshes `last_seen_at`. The compaction-watermark endpoint calculates the minimum cursor among devices active inside an explicit window. History at or below that cursor is eligible for a future compactor, but this checkpoint intentionally reports the watermark without deleting data. The activity cutoff is a product policy: a longer window protects rarely connected devices at the cost of retaining more history.
+
 ## Evolution plan
 
-Upcoming checkpoints add device inbox deduplication, conflict-copy policy, directory moves, quotas, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+Upcoming checkpoints add conflict-copy policy, directory moves, quotas, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
 
