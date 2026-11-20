@@ -13,6 +13,7 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Blob verification status polling and a hard commit gate for unverified bytes
 - Compare-and-set updates using client `baseVersion`
 - Explicit `409 VERSION_CONFLICT` for stale devices
+- Optional deterministic `KEEP_BOTH` conflict copies for concurrent offline edits
 - Payload-aware idempotent device operations
 - Durable delete tombstones
 - Transactional file-change outbox
@@ -36,6 +37,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 5. The client commits metadata with the last server version it observed; unverified content receives `409 BLOB_NOT_VERIFIED`.
 6. PostgreSQL locks the path head, rejects stale bases, appends the immutable version, advances the head, and writes an outbox event atomically.
 7. Downstream device feeds consume the stable change event; retries are safe through the operation ID.
+
+The default conflict policy remains `REJECT`. A client that cannot merge locally may send `KEEP_BOTH`; a stale edit is then committed as a deterministic sibling such as `report (conflict-11111111-a1b2c3d4e5f6).pdf`. The original head is never overwritten, the extension is retained, and retries return the same conflict copy through the existing operation ID.
 
 On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the ordered page locally and advances only to the returned `nextCursor`. Tombstones travel through the same feed, so a device cannot accidentally resurrect content deleted while it was offline.
 

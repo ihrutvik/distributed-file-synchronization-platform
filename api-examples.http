@@ -30,6 +30,13 @@ Content-Type: application/json
 
 {"operationId":"device-a-op-002","deviceId":"11111111-1111-1111-1111-111111111111","path":"docs/architecture.pdf","contentHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","sizeBytes":1049000,"baseVersion":1}
 
+### Preserve a stale offline edit as a deterministic sibling instead of overwriting
+POST http://localhost:8080/v1/files/versions
+X-Tenant-Id: acme
+Content-Type: application/json
+
+{"operationId":"device-b-conflict-001","deviceId":"22222222-2222-2222-2222-222222222222","path":"docs/architecture.pdf","contentHash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","sizeBytes":1050000,"baseVersion":1,"conflictPolicy":"KEEP_BOTH"}
+
 ### Create a tombstone so offline devices do not resurrect deleted content
 POST http://localhost:8080/v1/files/docs/architecture.pdf/delete
 X-Tenant-Id: acme

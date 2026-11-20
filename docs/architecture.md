@@ -8,11 +8,18 @@ The control plane records immutable file versions and durable change events. Fil
 
 1. **Content-addressed blobs.** A SHA-256 key deduplicates identical bytes and makes integrity verifiable. The database never stores large file bodies.
 2. **Compare-and-set head updates.** Every update names the version it was based on. A stale base produces an explicit `409 VERSION_CONFLICT`; the server never silently overwrites another device's work.
-3. **Immutable version history.** Each accepted mutation appends a version, then advances the locked path head in the same transaction.
-4. **Durable tombstones.** Deletes are versions, not row removal, preventing offline devices from resurrecting old content when they reconnect.
-5. **Payload-aware operations.** `(tenant, operationId)` is unique. Exact retries return the original result, while changed reuse conflicts.
-6. **Transactional outbox.** The version and its `FILE_VERSION_COMMITTED` or `FILE_DELETED` event commit atomically. Kafka publication can retry independently.
-7. **Tenant-local namespaces.** Paths are unique within a tenant, normalized before persistence, and cannot traverse parents.
+3. **Explicit conflict preservation.** `REJECT` remains the safe default. With `KEEP_BOTH`, a stale edit becomes a deterministic sibling file instead of overwriting the head.
+4. **Immutable version history.** Each accepted mutation appends a version, then advances the locked path head in the same transaction.
+5. **Durable tombstones.** Deletes are versions, not row removal, preventing offline devices from resurrecting old content when they reconnect.
+6. **Payload-aware operations.** `(tenant, operationId)` is unique. Exact retries return the original result, while changed reuse conflicts.
+7. **Transactional outbox.** The version and its `FILE_VERSION_COMMITTED` or `FILE_DELETED` event commit atomically. Kafka publication can retry independently.
+8. **Tenant-local namespaces.** Paths are unique within a tenant, normalized before persistence, and cannot traverse parents.
+
+## Concurrent offline-edit policy
+
+The version API accepts an optional `conflictPolicy`. `REJECT` preserves the original compare-and-set behavior and its historical request fingerprint, so exact retries created before this feature remain compatible. `KEEP_BOTH` is appropriate when a client cannot merge content locally and preserving both byte streams is safer than asking the user to repeat the upload.
+
+For a stale base, the service keeps the existing path head untouched and derives a sibling name from the device ID plus a SHA-256 token of `(deviceId, operationId)`. The name is deterministic, retains the original extension, and is truncated safely to the 1,024-character namespace limit. The conflict copy starts an independent immutable version history at version 1 and publishes through the same transactional outbox. The operation fingerprint includes the non-default policy, preventing the same idempotency key from being reused with different conflict semantics.
 
 ## Direct multipart blob transfer
 
@@ -44,5 +51,5 @@ The first concurrent acknowledgement uses an atomic PostgreSQL upsert, keeping t
 
 ## Evolution plan
 
-Upcoming checkpoints add conflict-copy policy, directory moves, quotas, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+Upcoming checkpoints add directory moves, quotas, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
 
