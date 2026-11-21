@@ -23,6 +23,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Bounded cursor pagination for reconnecting and offline devices
 - Durable per-device cursor acknowledgements with monotonic progression
 - Active-device compaction watermark for safe retention decisions
+- Transactional, concurrency-safe tenant logical storage quotas
+- Quota usage inspection with explicit `413 TENANT_QUOTA_EXCEEDED` failures
 - PostgreSQL constraints and lookup indexes
 - Path normalization and traversal protection
 - Java 17, Spring Boot, Flyway, PostgreSQL, Kafka, and MinIO
@@ -43,6 +45,8 @@ The default conflict policy remains `REJECT`. A client that cannot merge locally
 On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the ordered page locally and advances only to the returned `nextCursor`. Tombstones travel through the same feed, so a device cannot accidentally resurrect content deleted while it was offline.
 
 After durably applying a page, the device acknowledges its cursor through `PUT /v1/sync/devices/{deviceId}/cursor`. PostgreSQL rejects backwards movement and cursors beyond the tenant feed head. Operators can calculate the minimum acknowledgement across recently active devices before compacting history; inactive devices are deliberately excluded only through an explicit activity window.
+
+Each accepted file mutation updates a locked per-tenant quota ledger in the same PostgreSQL transaction as the immutable version and outbox event. New files and `KEEP_BOTH` copies consume their full logical size, replacements consume only the size delta, and tombstones release the deleted head's bytes. Exact operation replays bypass accounting, so retries never double-charge. Existing tenants are backfilled from live heads; the default 10 GiB allowance is configurable with `DEFAULT_TENANT_QUOTA_BYTES`. Clients can inspect usage through `GET /v1/storage/quota`.
 
 ```mermaid
 flowchart LR
@@ -69,5 +73,4 @@ See [API examples](api-examples.http) and [architecture decisions](docs/architec
 
 ## Engineering signals for recruiters
 
-This repository demonstrates offline-first concurrency design, immutable data modeling, database-enforced idempotency, transactional event publication, content-addressed storage, and explicit failure semantics. The design is original and based on public distributed-systems patterns; it contains no proprietary GoDaddy or Airtel code.
-
+This repository demonstrates offline-first concurrency design, immutable data modeling, database-enforced idempotency, transactional event publication, concurrency-safe quota accounting, content-addressed storage, and explicit failure semantics. The design is original and based on public distributed-systems patterns; it contains no proprietary GoDaddy or Airtel code.

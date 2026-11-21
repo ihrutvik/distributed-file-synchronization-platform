@@ -25,10 +25,11 @@ filesync:
     batch-size: ${VERIFICATION_BATCH_SIZE:20}
     poll-delay: ${VERIFICATION_POLL_DELAY:2000}
     lease-duration: ${VERIFICATION_LEASE_DURATION:PT5M}
+  quota:
+    default-bytes: ${DEFAULT_TENANT_QUOTA_BYTES:10737418240}
   outbox:
     topic: ${FILE_CHANGE_TOPIC:filesync.changes.v1}
     batch-size: ${OUTBOX_BATCH_SIZE:100}
     poll-delay: ${OUTBOX_POLL_DELAY:1000}
     lease-duration: ${OUTBOX_LEASE_DURATION:PT30S}
     send-timeout: ${OUTBOX_SEND_TIMEOUT:PT5S}
-

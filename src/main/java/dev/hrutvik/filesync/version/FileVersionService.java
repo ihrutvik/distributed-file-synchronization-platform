@@ -1,5 +1,6 @@
 package dev.hrutvik.filesync.version;
 
+import dev.hrutvik.filesync.quota.TenantQuotaStore;
 import dev.hrutvik.filesync.verification.BlobNotVerifiedException;
 import dev.hrutvik.filesync.verification.BlobVerificationStore;
 import org.springframework.stereotype.Service;
@@ -17,10 +18,12 @@ import java.util.UUID;
 public class FileVersionService {
  private final FileVersionStore store;
  private final BlobVerificationStore verification;
+ private final TenantQuotaStore quota;
 
- public FileVersionService(FileVersionStore store, BlobVerificationStore verification) {
+ public FileVersionService(FileVersionStore store, BlobVerificationStore verification, TenantQuotaStore quota) {
   this.store = store;
   this.verification = verification;
+  this.quota = quota;
  }
 
  @Transactional
@@ -40,10 +43,12 @@ public class FileVersionService {
   UUID fileId;
   String targetPath = path;
   Long targetBase = request.baseVersion();
+  long quotaDelta;
   if (head.isEmpty()) {
    if (request.baseVersion() != null) throw conflict("file does not exist", null, request.baseVersion());
    nextVersion = 1;
    fileId = UUID.randomUUID();
+   quotaDelta = request.sizeBytes();
   } else {
    long current = head.get().version();
    if (request.baseVersion() == null || request.baseVersion() != current) {
@@ -53,11 +58,14 @@ public class FileVersionService {
     nextVersion = 1;
     fileId = UUID.randomUUID();
     targetBase = null;
+    quotaDelta = request.sizeBytes();
    } else {
     nextVersion = current + 1;
     fileId = head.get().fileId();
+    quotaDelta = request.sizeBytes() - (head.get().deleted() ? 0 : head.get().sizeBytes());
    }
   }
+  quota.applyDelta(tenant, quotaDelta);
   var persisted = new CommitVersionRequest(request.operationId(), request.deviceId(), targetPath, hash, request.sizeBytes(), targetBase, policy);
   return store.save(tenant, fileId, nextVersion, persisted, fingerprint);
  }
@@ -71,6 +79,7 @@ public class FileVersionService {
   var head = store.lockHead(tenant, path).orElseThrow(() -> conflict("file does not exist", null, request.baseVersion()));
   if (head.deleted()) throw conflict("file is already deleted", head.version(), request.baseVersion());
   if (request.baseVersion() == null || request.baseVersion() != head.version()) throw conflict("stale base version", head.version(), request.baseVersion());
+  quota.applyDelta(tenant, -head.sizeBytes());
   return store.tombstone(tenant, head, path, request, fingerprint);
  }
 
@@ -108,4 +117,3 @@ public class FileVersionService {
   }
  }
 }
-

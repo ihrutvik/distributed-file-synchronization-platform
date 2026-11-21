@@ -49,7 +49,12 @@ A client acknowledges a cursor only after the corresponding page is durably appl
 
 The first concurrent acknowledgement uses an atomic PostgreSQL upsert, keeping the greater cursor if two initial requests race. Every successful acknowledgement refreshes `last_seen_at`. The compaction-watermark endpoint calculates the minimum cursor among devices active inside an explicit window. History at or below that cursor is eligible for a future compactor, but this checkpoint intentionally reports the watermark without deleting data. The activity cutoff is a product policy: a longer window protects rarely connected devices at the cost of retaining more history.
 
+## Transactional quota accounting
+
+Quotas measure the current logical namespace rather than physical object-store bytes. Content-addressed blobs may be shared and old immutable versions are retained, so charging physical bytes here would couple tenant policy to garbage collection and deduplication internals. A new file or conflict copy adds its full size, a replacement applies `newSize - oldSize`, and a tombstone subtracts the live head size.
+
+Each tenant owns one quota row. The version transaction creates that row if needed, locks it with `FOR UPDATE`, validates the proposed delta, and updates usage before saving metadata. This serializes concurrent commits for one tenant and guarantees that two uploads cannot both spend the same remaining capacity. A later metadata or outbox failure rolls back the ledger update with the rest of the transaction. Operation replay is checked first, avoiding double-accounting on retries. Existing tenants are backfilled from non-deleted heads during migration; operators can configure the default quota and evolve individual limits directly in the control plane.
+
 ## Evolution plan
 
-Upcoming checkpoints add directory moves, quotas, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
-
+Upcoming checkpoints add directory moves, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.

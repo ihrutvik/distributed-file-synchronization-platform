@@ -63,3 +63,10 @@ X-Tenant-Id: acme
 GET http://localhost:8080/v1/sync/devices/compaction-watermark?activeWithinHours=720
 X-Tenant-Id: acme
 
+### Inspect the tenant's logical storage quota
+GET http://localhost:8080/v1/storage/quota
+X-Tenant-Id: acme
+
+# A version commit that would exceed the remaining allowance returns:
+# HTTP/1.1 413 Payload Too Large
+# {"code":"TENANT_QUOTA_EXCEEDED","message":"storage quota exceeded; ..."}
