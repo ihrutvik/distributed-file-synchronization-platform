@@ -70,3 +70,13 @@ X-Tenant-Id: acme
 # A version commit that would exceed the remaining allowance returns:
 # HTTP/1.1 413 Payload Too Large
 # {"code":"TENANT_QUOTA_EXCEEDED","message":"storage quota exceeded; ..."}
+
+### Atomically move a file while preserving its identity and content reference
+POST http://localhost:8080/v1/files/moves
+X-Tenant-Id: acme
+Content-Type: application/json
+
+{"operationId":"device-a-move-001","deviceId":"11111111-1111-1111-1111-111111111111","sourcePath":"docs/architecture.pdf","destinationPath":"published/architecture.pdf","baseVersion":2}
+
+# Reconnecting devices receive changeType=MOVE and previousPath=docs/architecture.pdf
+# in the incremental change feed.

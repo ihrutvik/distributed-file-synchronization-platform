@@ -55,6 +55,12 @@ Quotas measure the current logical namespace rather than physical object-store b
 
 Each tenant owns one quota row. The version transaction creates that row if needed, locks it with `FOR UPDATE`, validates the proposed delta, and updates usage before saving metadata. This serializes concurrent commits for one tenant and guarantees that two uploads cannot both spend the same remaining capacity. A later metadata or outbox failure rolls back the ledger update with the rest of the transaction. Operation replay is checked first, avoiding double-accounting on retries. Existing tenants are backfilled from non-deleted heads during migration; operators can configure the default quota and evolve individual limits directly in the control plane.
 
+## Atomic moves and renames
+
+A move is namespace metadata, not an object-store copy. The API requires the source path, destination path, and observed source version. Before reading either head, the transaction acquires advisory locks for both tenant-path keys in lexical order. Unlike row locks alone, advisory locks also protect a currently absent destination; deterministic ordering prevents two cross-path moves from deadlocking.
+
+The service rejects a stale or deleted source and refuses to overwrite a live destination. It then appends one immutable `MOVE` version, deletes the old namespace head, advances the same file ID at the destination, and emits `FILE_MOVED` through the transactional outbox. The change feed includes `changeType` and `previousPath`, so reconnecting clients can apply the rename without interpreting it as a second physical file. Content hash, size, and tenant quota usage do not change. Exact operation retries return the recorded result without moving again.
+
 ## Evolution plan
 
-Upcoming checkpoints add directory moves, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+Upcoming checkpoints add batched directory moves, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.

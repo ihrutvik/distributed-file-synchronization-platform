@@ -74,6 +74,31 @@ class FileVersionServiceTest {
   verify(versions,never()).save(anyString(),any(),anyLong(),any(),anyString());
  }
 
+ @Test void movesAFileWithoutChangingItsIdentityOrQuota(){
+  var versions=mock(FileVersionStore.class);var quota=mock(TenantQuotaStore.class);var fileId=UUID.randomUUID();var head=new FileVersionStore.Head(fileId,4,"a".repeat(64),35,false,Instant.now());
+  when(versions.replay(anyString(),anyString(),anyString())).thenReturn(Optional.empty());when(versions.lockHead("acme","drafts/a.txt")).thenReturn(Optional.of(head));when(versions.lockHead("acme","published/a.txt")).thenReturn(Optional.empty());
+  var request=new MoveFileRequest("move-op",UUID.randomUUID(),"drafts/a.txt","published/a.txt",4L);
+  new FileVersionService(versions,mock(BlobVerificationStore.class),quota).move("acme",request);
+  verify(versions).lockMovePaths("acme","drafts/a.txt","published/a.txt");
+  verify(versions).move(eq("acme"),eq(head),eq("drafts/a.txt"),eq("published/a.txt"),eq(request),anyString());
+  verifyNoInteractions(quota);
+ }
+
+ @Test void rejectsMoveWhenDestinationAlreadyExists(){
+  var versions=mock(FileVersionStore.class);var source=new FileVersionStore.Head(UUID.randomUUID(),2,"a".repeat(64),10,false,Instant.now());var destination=new FileVersionStore.Head(UUID.randomUUID(),7,"b".repeat(64),20,false,Instant.now());
+  when(versions.replay(anyString(),anyString(),anyString())).thenReturn(Optional.empty());when(versions.lockHead("acme","a.txt")).thenReturn(Optional.of(source));when(versions.lockHead("acme","b.txt")).thenReturn(Optional.of(destination));
+  var request=new MoveFileRequest("move-op",UUID.randomUUID(),"a.txt","b.txt",2L);
+  assertThrows(VersionConflictException.class,()->new FileVersionService(versions,mock(BlobVerificationStore.class),mock(TenantQuotaStore.class)).move("acme",request));
+  verify(versions,never()).move(anyString(),any(),anyString(),anyString(),any(),anyString());
+ }
+
+ @Test void rejectsMoveWithStaleSourceVersion(){
+  var versions=mock(FileVersionStore.class);var source=new FileVersionStore.Head(UUID.randomUUID(),3,"a".repeat(64),10,false,Instant.now());
+  when(versions.replay(anyString(),anyString(),anyString())).thenReturn(Optional.empty());when(versions.lockHead("acme","a.txt")).thenReturn(Optional.of(source));
+  var request=new MoveFileRequest("move-op",UUID.randomUUID(),"a.txt","b.txt",2L);
+  assertThrows(VersionConflictException.class,()->new FileVersionService(versions,mock(BlobVerificationStore.class),mock(TenantQuotaStore.class)).move("acme",request));
+ }
+
  @Test void preservesExtensionInConflictPath(){
   String path=FileVersionService.conflictPath("docs/report.pdf",UUID.fromString("11111111-1111-1111-1111-111111111111"),"op");
   assertTrue(path.startsWith("docs/report (conflict-11111111-"));assertTrue(path.endsWith(").pdf"));

@@ -83,6 +83,28 @@ public class FileVersionService {
   return store.tombstone(tenant, head, path, request, fingerprint);
  }
 
+ @Transactional
+ public CommitVersionResponse move(String tenant, MoveFileRequest request) {
+  String source = normalize(request.sourcePath());
+  String destination = normalize(request.destinationPath());
+  if (source.equals(destination)) throw new IllegalArgumentException("sourcePath and destinationPath must differ");
+  String fingerprint = fingerprint("MOVE", request.operationId(), request.deviceId(), source, destination, request.baseVersion());
+  var replay = store.replay(tenant, request.operationId(), fingerprint);
+  if (replay.isPresent()) return replay.get();
+
+  store.lockMovePaths(tenant, source, destination);
+  var sourceHead = store.lockHead(tenant, source)
+    .orElseThrow(() -> conflict("source file does not exist", null, request.baseVersion()));
+  if (sourceHead.deleted()) throw conflict("source file is deleted", sourceHead.version(), request.baseVersion());
+  if (!request.baseVersion().equals(sourceHead.version()))
+   throw conflict("stale base version", sourceHead.version(), request.baseVersion());
+  var destinationHead = store.lockHead(tenant, destination);
+  if (destinationHead.isPresent() && !destinationHead.get().deleted())
+   throw conflict("destination path already exists", destinationHead.get().version(), request.baseVersion());
+
+  return store.move(tenant, sourceHead, source, destination, request, fingerprint);
+ }
+
  static String normalize(String path) {
   String normalized = path.trim().replace('\\', '/').replaceAll("/+", "/");
   if (normalized.startsWith("/") || normalized.equals("..") || normalized.startsWith("../") || normalized.contains("/../") || normalized.endsWith("/.."))

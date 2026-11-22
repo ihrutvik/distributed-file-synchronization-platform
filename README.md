@@ -14,6 +14,7 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Compare-and-set updates using client `baseVersion`
 - Explicit `409 VERSION_CONFLICT` for stale devices
 - Optional deterministic `KEEP_BOTH` conflict copies for concurrent offline edits
+- Atomic compare-and-set file moves and renames that preserve file identity
 - Payload-aware idempotent device operations
 - Durable delete tombstones
 - Transactional file-change outbox
@@ -43,6 +44,8 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 The default conflict policy remains `REJECT`. A client that cannot merge locally may send `KEEP_BOTH`; a stale edit is then committed as a deterministic sibling such as `report (conflict-11111111-a1b2c3d4e5f6).pdf`. The original head is never overwritten, the extension is retained, and retries return the same conflict copy through the existing operation ID.
 
 On reconnect, a device calls `GET /v1/changes?after=<cursor>`. It applies the ordered page locally and advances only to the returned `nextCursor`. Tombstones travel through the same feed, so a device cannot accidentally resurrect content deleted while it was offline.
+
+Moves use the same optimistic-concurrency contract as content updates. A client submits the source version it observed; PostgreSQL serializes both source and destination paths with transaction-scoped advisory locks, rejects stale sources or occupied destinations, appends a `MOVE` version, and moves the namespace head atomically. The file ID, blob reference, and quota usage remain unchanged. Change-feed records expose `changeType=MOVE` and `previousPath`, allowing offline devices to remove the old path and materialize the new one as one logical operation.
 
 After durably applying a page, the device acknowledges its cursor through `PUT /v1/sync/devices/{deviceId}/cursor`. PostgreSQL rejects backwards movement and cursors beyond the tenant feed head. Operators can calculate the minimum acknowledgement across recently active devices before compacting history; inactive devices are deliberately excluded only through an explicit activity window.
 
