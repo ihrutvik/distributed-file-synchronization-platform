@@ -29,6 +29,8 @@ The durable session stores the remote upload ID, expiry, request fingerprint, an
 
 Completion requires every part exactly once and uses the client-returned ETags. The service checks the S3 object size and declared `content-sha256` metadata before marking the session complete. Because multipart ETags are not content hashes and object metadata is client-declared, neither proves byte integrity.
 
+Abandoned multipart uploads are an operational cost and quota risk, so expired `READY` sessions enter a leased cleanup workflow. Replicas claim small batches with `FOR UPDATE SKIP LOCKED`, change them to `ABORTING`, and commit before contacting S3. An abort succeeds even when S3 reports the upload already missing. Failures return the session to `READY`, retain an attempt counter and bounded diagnostic, and increment retry metrics. If a process dies after claiming, `cleanup_leased_until` eventually expires and another replica resumes the abort. Completion rejects expired sessions, so cleanup cannot race a valid client completion.
+
 Completed sessions therefore enter a persisted verification state machine: `PENDING → VERIFYING → VERIFIED|REJECTED`. Worker replicas lease candidates with `FOR UPDATE SKIP LOCKED`, release the database transaction, and stream each object through SHA-256 without loading it into memory. A matching digest marks the blob verified; mismatch is terminal and transport failures release the lease for retry. Expired leases recover crashed workers. The upload-session GET endpoint exposes progress, and file-version commits accept only hashes backed by a `VERIFIED` session. Idempotent commit replays are checked before this gate so a later retention change cannot break an already accepted retry.
 
 ## Reliable change publication
@@ -63,4 +65,4 @@ The service rejects a stale or deleted source and refuses to overwrite a live de
 
 ## Evolution plan
 
-Upcoming checkpoints add batched directory moves, Redis hot manifests, garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+Upcoming checkpoints add batched directory moves, Redis hot manifests, blob garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.

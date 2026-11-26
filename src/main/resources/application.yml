@@ -20,7 +20,12 @@ filesync:
     access-key: ${AWS_ACCESS_KEY_ID:filesync}
     secret-key: ${AWS_SECRET_ACCESS_KEY:filesync-secret}
     presign-ttl: ${PRESIGN_TTL:PT15M}
-  upload.session-ttl: ${UPLOAD_SESSION_TTL:PT1H}
+  upload:
+    session-ttl: ${UPLOAD_SESSION_TTL:PT1H}
+    cleanup:
+      batch-size: ${UPLOAD_CLEANUP_BATCH_SIZE:50}
+      poll-delay: ${UPLOAD_CLEANUP_POLL_DELAY:60000}
+      lease-duration: ${UPLOAD_CLEANUP_LEASE_DURATION:PT5M}
   verification:
     batch-size: ${VERIFICATION_BATCH_SIZE:20}
     poll-delay: ${VERIFICATION_POLL_DELAY:2000}

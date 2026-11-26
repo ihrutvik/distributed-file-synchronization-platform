@@ -8,6 +8,7 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - SHA-256 content-addressed blob references
 - Durable multipart upload sessions with direct-to-S3 presigned part URLs
 - Replay-safe session creation and compensating multipart aborts
+- Crash-recoverable cleanup of expired multipart uploads with leased workers
 - Completion checks for expected object size and declared hash metadata
 - Streamed server-side SHA-256 verification with leased, retryable workers
 - Blob verification status polling and a hard commit gate for unverified bytes
@@ -50,6 +51,8 @@ Moves use the same optimistic-concurrency contract as content updates. A client 
 After durably applying a page, the device acknowledges its cursor through `PUT /v1/sync/devices/{deviceId}/cursor`. PostgreSQL rejects backwards movement and cursors beyond the tenant feed head. Operators can calculate the minimum acknowledgement across recently active devices before compacting history; inactive devices are deliberately excluded only through an explicit activity window.
 
 Each accepted file mutation updates a locked per-tenant quota ledger in the same PostgreSQL transaction as the immutable version and outbox event. New files and `KEEP_BOTH` copies consume their full logical size, replacements consume only the size delta, and tombstones release the deleted head's bytes. Exact operation replays bypass accounting, so retries never double-charge. Existing tenants are backfilled from live heads; the default 10 GiB allowance is configurable with `DEFAULT_TENANT_QUOTA_BYTES`. Clients can inspect usage through `GET /v1/storage/quota`.
+
+Expired multipart sessions are reclaimed automatically. Worker replicas atomically claim bounded batches with `FOR UPDATE SKIP LOCKED`, transition them to `ABORTING`, and release the database transaction before calling S3. Successful or already-missing remote uploads become `ABORTED`; transient failures return to `READY` with an attempt count and bounded error detail. Expired leases allow another replica to recover work after a crash, while Prometheus exposes aborted and retry outcomes.
 
 ```mermaid
 flowchart LR

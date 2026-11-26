@@ -10,6 +10,6 @@ import org.springframework.beans.factory.annotation.Value; import org.springfram
  public BlobHead head(String key){var h=s3.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());return new BlobHead(h.contentLength(),h.metadata().get("content-sha256"));}
  public String sha256(String key){try(var input=s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build())){var digest=MessageDigest.getInstance("SHA-256");input.transferTo(new DigestOutputStream(OutputStream.nullOutputStream(),digest));return HexFormat.of().formatHex(digest.digest());}catch(IOException|NoSuchAlgorithmException e){throw new IllegalStateException("could not verify blob",e);}}
  public void abort(String key,String uploadId){s3.abortMultipartUpload(AbortMultipartUploadRequest.builder().bucket(bucket).key(key).uploadId(uploadId).build());}
+ public void abortIfPresent(String key,String uploadId){try{abort(key,uploadId);}catch(S3Exception failure){if(failure.statusCode()!=404)throw failure;}}
  public record RemoteUpload(String objectKey,String uploadId){} public record PartUpload(int partNumber,String url){} public record CompletedUploadPart(int partNumber,String eTag){} public record BlobHead(long sizeBytes,String declaredHash){}
 }
-

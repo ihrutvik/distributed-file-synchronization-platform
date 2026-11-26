@@ -80,3 +80,6 @@ Content-Type: application/json
 
 # Reconnecting devices receive changeType=MOVE and previousPath=docs/architecture.pdf
 # in the incremental change feed.
+
+# Upload sessions that remain READY beyond expiresAt are claimed by the cleanup
+# worker, aborted in S3/MinIO, and exposed as ABORTED by the existing GET endpoint.
