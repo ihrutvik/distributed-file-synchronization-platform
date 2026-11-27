@@ -63,6 +63,12 @@ A move is namespace metadata, not an object-store copy. The API requires the sou
 
 The service rejects a stale or deleted source and refuses to overwrite a live destination. It then appends one immutable `MOVE` version, deletes the old namespace head, advances the same file ID at the destination, and emits `FILE_MOVED` through the transactional outbox. The change feed includes `changeType` and `previousPath`, so reconnecting clients can apply the rename without interpreting it as a second physical file. Content hash, size, and tenant quota usage do not change. Exact operation retries return the recorded result without moving again.
 
+## Redis hot manifests
+
+Metadata reads are cache-aside: Redis stores a compact manifest keyed by a SHA-256 digest of tenant and normalized path, while PostgreSQL remains authoritative. A hit avoids a database round trip; a miss, malformed entry, timeout, or Redis outage falls back to PostgreSQL and attempts a best-effort refresh. Short TTLs bound stale data even if invalidation fails.
+
+Writes never update Redis inside the database transaction. Instead, commits, tombstones, and moves register post-commit eviction callbacks for every affected path. This prevents a rolled-back mutation from evicting or publishing speculative state. Since Redis is not transactionally coupled to PostgreSQL, the API also exposes `strong=true`: it bypasses Redis, reads the authoritative head, and refreshes the cache. Cache hit, miss, and failure counters are exported to Prometheus.
+
 ## Evolution plan
 
-Upcoming checkpoints add batched directory moves, Redis hot manifests, blob garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+Upcoming checkpoints add batched directory moves, blob garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.

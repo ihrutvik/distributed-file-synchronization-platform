@@ -11,6 +11,10 @@ spring:
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
+  data.redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    timeout: ${REDIS_TIMEOUT:250ms}
 management.endpoints.web.exposure.include: health,info,prometheus
 filesync:
   blob:
@@ -32,6 +36,8 @@ filesync:
     lease-duration: ${VERIFICATION_LEASE_DURATION:PT5M}
   quota:
     default-bytes: ${DEFAULT_TENANT_QUOTA_BYTES:10737418240}
+  manifest-cache:
+    ttl: ${MANIFEST_CACHE_TTL:PT30S}
   outbox:
     topic: ${FILE_CHANGE_TOPIC:filesync.changes.v1}
     batch-size: ${OUTBOX_BATCH_SIZE:100}

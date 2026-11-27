@@ -83,3 +83,11 @@ Content-Type: application/json
 
 # Upload sessions that remain READY beyond expiresAt are claimed by the cleanup
 # worker, aborted in S3/MinIO, and exposed as ABORTED by the existing GET endpoint.
+
+### Read a hot manifest through Redis with PostgreSQL fallback
+GET http://localhost:8080/v1/files/metadata/published/architecture.pdf
+X-Tenant-Id: acme
+
+### Bypass Redis when the caller requires authoritative read-after-write state
+GET http://localhost:8080/v1/files/metadata/published/architecture.pdf?strong=true
+X-Tenant-Id: acme

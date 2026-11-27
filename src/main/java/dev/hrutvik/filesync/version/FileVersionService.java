@@ -5,6 +5,7 @@ import dev.hrutvik.filesync.verification.BlobNotVerifiedException;
 import dev.hrutvik.filesync.verification.BlobVerificationStore;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -19,12 +20,17 @@ public class FileVersionService {
  private final FileVersionStore store;
  private final BlobVerificationStore verification;
  private final TenantQuotaStore quota;
+ private final FileManifestCache manifests;
 
- public FileVersionService(FileVersionStore store, BlobVerificationStore verification, TenantQuotaStore quota) {
+ @Autowired
+ public FileVersionService(FileVersionStore store, BlobVerificationStore verification, TenantQuotaStore quota, FileManifestCache manifests) {
   this.store = store;
   this.verification = verification;
   this.quota = quota;
+  this.manifests = manifests;
  }
+
+ FileVersionService(FileVersionStore store,BlobVerificationStore verification,TenantQuotaStore quota){this(store,verification,quota,FileManifestCache.NOOP);}
 
  @Transactional
  public CommitVersionResponse commit(String tenant, CommitVersionRequest request) {
@@ -67,7 +73,9 @@ public class FileVersionService {
   }
   quota.applyDelta(tenant, quotaDelta);
   var persisted = new CommitVersionRequest(request.operationId(), request.deviceId(), targetPath, hash, request.sizeBytes(), targetBase, policy);
-  return store.save(tenant, fileId, nextVersion, persisted, fingerprint);
+  var result=store.save(tenant, fileId, nextVersion, persisted, fingerprint);
+  manifests.evictAfterCommit(tenant,targetPath);
+  return result;
  }
 
  @Transactional
@@ -80,7 +88,9 @@ public class FileVersionService {
   if (head.deleted()) throw conflict("file is already deleted", head.version(), request.baseVersion());
   if (request.baseVersion() == null || request.baseVersion() != head.version()) throw conflict("stale base version", head.version(), request.baseVersion());
   quota.applyDelta(tenant, -head.sizeBytes());
-  return store.tombstone(tenant, head, path, request, fingerprint);
+  var result=store.tombstone(tenant, head, path, request, fingerprint);
+  manifests.evictAfterCommit(tenant,path);
+  return result;
  }
 
  @Transactional
@@ -102,7 +112,9 @@ public class FileVersionService {
   if (destinationHead.isPresent() && !destinationHead.get().deleted())
    throw conflict("destination path already exists", destinationHead.get().version(), request.baseVersion());
 
-  return store.move(tenant, sourceHead, source, destination, request, fingerprint);
+  var result=store.move(tenant, sourceHead, source, destination, request, fingerprint);
+  manifests.evictAfterCommit(tenant,source,destination);
+  return result;
  }
 
  static String normalize(String path) {

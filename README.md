@@ -26,6 +26,7 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Durable per-device cursor acknowledgements with monotonic progression
 - Active-device compaction watermark for safe retention decisions
 - Transactional, concurrency-safe tenant logical storage quotas
+- Redis-backed hot manifest reads with strong-consistency bypass
 - Quota usage inspection with explicit `413 TENANT_QUOTA_EXCEEDED` failures
 - PostgreSQL constraints and lookup indexes
 - Path normalization and traversal protection
@@ -53,6 +54,8 @@ After durably applying a page, the device acknowledges its cursor through `PUT /
 Each accepted file mutation updates a locked per-tenant quota ledger in the same PostgreSQL transaction as the immutable version and outbox event. New files and `KEEP_BOTH` copies consume their full logical size, replacements consume only the size delta, and tombstones release the deleted head's bytes. Exact operation replays bypass accounting, so retries never double-charge. Existing tenants are backfilled from live heads; the default 10 GiB allowance is configurable with `DEFAULT_TENANT_QUOTA_BYTES`. Clients can inspect usage through `GET /v1/storage/quota`.
 
 Expired multipart sessions are reclaimed automatically. Worker replicas atomically claim bounded batches with `FOR UPDATE SKIP LOCKED`, transition them to `ABORTING`, and release the database transaction before calling S3. Successful or already-missing remote uploads become `ABORTED`; transient failures return to `READY` with an attempt count and bounded error detail. Expired leases allow another replica to recover work after a crash, while Prometheus exposes aborted and retry outcomes.
+
+`GET /v1/files/metadata/{path}` serves hot manifests from Redis and falls back to PostgreSQL on a miss or cache outage. Mutations evict affected paths only after the database transaction commits, preventing uncommitted state from reaching readers. Cache failures are fail-open and entries expire after 30 seconds, so Redis is an acceleration layer rather than a correctness dependency. Callers that require read-after-write certainty can send `?strong=true` to bypass Redis and refresh the cached manifest from PostgreSQL.
 
 ```mermaid
 flowchart LR
