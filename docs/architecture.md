@@ -71,4 +71,8 @@ Writes never update Redis inside the database transaction. Instead, commits, tom
 
 ## Evolution plan
 
-Upcoming checkpoints add batched directory moves, blob garbage collection, S3 event reconciliation, security, tracing, load tests, AWS deployment, and SLO dashboards.
+### Blob integrity reconciliation
+
+Verification proves uploaded bytes once, but it cannot protect against later bucket lifecycle mistakes or operator deletion. A periodic worker therefore leases previously verified uploads with `FOR UPDATE SKIP LOCKED` and compares S3 HEAD metadata with the durable expected size and SHA-256. Missing or mutated objects become `MISSING`, preventing new versions from referencing unhealthy content. A later successful scan restores `HEALTHY`, so transient restoration does not require a manual database repair. Storage outages release the lease without changing health, and `filesync.blob.reconciliation` exposes healthy, missing, mismatch, and retry outcomes.
+
+Upcoming checkpoints add batched directory moves, blob garbage collection, security, tracing, load tests, AWS deployment, and SLO dashboards.

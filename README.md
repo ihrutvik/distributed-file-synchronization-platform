@@ -12,6 +12,7 @@ A production-minded Java 17 control plane for synchronizing large file trees acr
 - Completion checks for expected object size and declared hash metadata
 - Streamed server-side SHA-256 verification with leased, retryable workers
 - Blob verification status polling and a hard commit gate for unverified bytes
+- Leased S3 reconciliation that detects missing or mutated verified blobs and automatically recognizes recovery
 - Compare-and-set updates using client `baseVersion`
 - Explicit `409 VERSION_CONFLICT` for stale devices
 - Optional deterministic `KEEP_BOTH` conflict copies for concurrent offline edits

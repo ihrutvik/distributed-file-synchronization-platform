@@ -34,6 +34,11 @@ filesync:
     batch-size: ${VERIFICATION_BATCH_SIZE:20}
     poll-delay: ${VERIFICATION_POLL_DELAY:2000}
     lease-duration: ${VERIFICATION_LEASE_DURATION:PT5M}
+  reconciliation:
+    batch-size: ${RECONCILIATION_BATCH_SIZE:50}
+    poll-delay: ${RECONCILIATION_POLL_DELAY:60000}
+    lease-duration: ${RECONCILIATION_LEASE_DURATION:PT5M}
+    interval: ${RECONCILIATION_INTERVAL:PT24H}
   quota:
     default-bytes: ${DEFAULT_TENANT_QUOTA_BYTES:10737418240}
   manifest-cache:

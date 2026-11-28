@@ -3,10 +3,9 @@ import org.springframework.jdbc.core.simple.JdbcClient; import org.springframewo
 @Repository public class BlobVerificationStore {
  private final JdbcClient db; public BlobVerificationStore(JdbcClient db){this.db=db;}
  @Transactional public List<Candidate> claim(String owner,int limit,Duration lease){var rows=db.sql("select id,object_key,content_hash from upload_sessions where status='COMPLETED' and (verification_status='PENDING' or (verification_status='VERIFYING' and verification_lease_until < now())) order by completed_at for update skip locked limit :n").param("n",limit).query((rs,n)->new Candidate(rs.getObject("id",UUID.class),rs.getString("object_key"),rs.getString("content_hash"))).list();for(var row:rows)db.sql("update upload_sessions set verification_status='VERIFYING',verification_lease_owner=:o,verification_lease_until=:u where id=:id").param("o",owner).param("u",Instant.now().plus(lease)).param("id",row.id()).update();return rows;}
- public boolean isVerified(String hash){return db.sql("select count(*) from upload_sessions where content_hash=:h and verification_status='VERIFIED'").param("h",hash).query(Integer.class).single()>0;}
+ public boolean isVerified(String hash){return db.sql("select count(*) from upload_sessions where content_hash=:h and verification_status='VERIFIED' and blob_health<>'MISSING'").param("h",hash).query(Integer.class).single()>0;}
  public void verified(UUID id,String owner){db.sql("update upload_sessions set verification_status='VERIFIED',verified_at=now(),verification_lease_owner=null,verification_lease_until=null,verification_failure=null where id=:id and verification_lease_owner=:o").param("id",id).param("o",owner).update();}
  public void rejected(UUID id,String owner,String reason){db.sql("update upload_sessions set verification_status='REJECTED',verification_failure=:r,verification_lease_owner=null,verification_lease_until=null where id=:id and verification_lease_owner=:o").param("id",id).param("o",owner).param("r",reason).update();}
  public void release(UUID id,String owner){db.sql("update upload_sessions set verification_status='PENDING',verification_lease_owner=null,verification_lease_until=null where id=:id and verification_lease_owner=:o").param("id",id).param("o",owner).update();}
  public record Candidate(UUID id,String objectKey,String expectedHash){}
 }
-
